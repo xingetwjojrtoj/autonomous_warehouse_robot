@@ -1,0 +1,217 @@
+amcl:
+  ros__parameters:
+    use_sim_time: false
+    alpha1: 0.2  # Expected rotational noise from rotation (Lower = trust IMU/odom orientation more)
+    alpha2: 0.2  # Expected rotational noise from translation
+    alpha3: 0.2   # Expected translational noise from translation
+    alpha4: 0.2   # Expected translational noise from rotation
+    alpha5: 0.2
+    base_frame_id: "base_link"
+    global_frame_id: "map"
+    odom_frame_id: "odom"
+    scan_topic: /scan_front # Change to /scan_front if your LiDAR topic is named that
+    map_topic: map
+    set_initial_pose: true
+    update_min_d: 0.1   # Update filter every 10 cm of translation
+    update_min_a: 0.2   # Update filter ONLY after rotating ~28 degrees (0.5 rad)
+    transform_tolerance: 1.0
+    always_reset_initial_pose: false
+    first_map_only: false
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0  # 3.14 initally
+    max_particles: 1000
+    min_particles: 500
+    pf_err: 0.05
+    pf_z: 0.99
+    resample_interval: 1
+    max_beams: 60  ####was not there esrlier   
+    
+    recovery_alpha_slow: 0.0
+    recovery_alpha_fast: 0.0
+
+  
+bt_navigator:
+  ros__parameters:
+    use_sim_time: false
+    global_frame: map # initally map
+    robot_base_frame: base_link
+    odom_topic: /odometry/local
+    # odom_topic: /ground_truth/odom
+    # default_nav_to_pose_bt_xml: ""
+    # default_nav_through_poses_bt_xml: ""
+
+controller_server:
+  ros__parameters:
+    use_sim_time: false
+    controller_frequency: 10.0   #earlier 5.0
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.5
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["goal_checker"]
+    controller_plugins: ["FollowPath"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.3
+      movement_time_allowance: 15.0
+
+    goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.5
+      yaw_goal_tolerance: 0.9
+      stateful: true
+
+    FollowPath:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      allow_reversing: false
+      desired_linear_vel: 0.3
+      regulated_linear_scaling_min_radius: 0.65
+      lookahead_dist: 0.6
+      min_lookahead_dist: 0.35
+      max_lookahead_dist: 3.0 #initally 1.0
+      max_angular_accel: 0.5
+      max_linear_accel: 1.0
+      use_velocity_scaled_lookahead_dist: false
+      min_approach_linear_velocity: 0.25
+      approach_velocity_scaling_dist: 0.6
+      max_allowed_time_to_collision_up_to_carrot: 1.0
+      use_regulated_linear_velocity_scaling: true
+      use_cost_regulated_linear_velocity_scaling: true   #was false initally
+      regulated_linear_scaling_min_radius: 0.9
+      regulated_linear_scaling_min_speed: 0.0
+      rotate_to_heading_angular_vel: 0.22   # ADD THIS — default is 1.8 rad/s
+      use_rotate_to_heading: true          # confirm this is true (default)
+      rotate_to_heading_min_angle: 0.4   # angle threshold to trigger in-place rotation (default ~45°)
+      max_angular_velocity: 0.238
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: false
+      global_frame: odom  # initally map
+      robot_base_frame: base_link
+      update_frequency: 10.0  #initally 5.0
+      publish_frequency: 5.0   #initally 2.0
+      rolling_window: true    #might need to make it true , want obstracle memory to be temporary
+      width: 12
+      height: 12
+      resolution: 0.05
+      footprint: "[[0.565, 0.3], [0.565, -0.3], [-0.565, -0.3], [-0.565, 0.3]]"
+      plugins: ["obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan_front
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: "LaserScan"
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 2.0  #initally 3.0
+        inflation_radius: 0.7  #initally 0.4
+      always_send_full_costmap: true
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      use_sim_time: false
+      global_frame: map # initally map
+      robot_base_frame: base_link
+      update_frequency: 2.0
+      publish_frequency: 1.0
+      rolling_window: false
+      origin_x: -10.0
+      origin_y: -10.0
+      width: 20     #initally was 20
+      height: 20
+      resolution: 0.1
+      footprint: "[[0.565, 0.3], [0.565, -0.3], [-0.565, -0.3], [-0.565, 0.3]]"
+      plugins: ["static_layer","obstacle_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer" # Loads your base map
+        map_subscribe_transient_local: True
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan_front
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: "LaserScan"
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 2.0  #3.0 initally
+        inflation_radius: 0.7  #initially 0.5
+      always_send_full_costmap: true
+
+planner_server:
+  ros__parameters:
+    use_sim_time: false
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.5
+      use_astar: false  # was false initally
+      allow_unknown: true
+
+behavior_server:
+  ros__parameters:
+    use_sim_time: false
+    local_costmap_topic: local_costmap/costmap_raw
+    global_costmap_topic: global_costmap/costmap_raw
+    local_footprint_topic: local_costmap/published_footprint
+    global_footprint_topic: global_costmap/published_footprint
+    cycle_frequency: 10.0
+    behavior_plugins: ["spin", "backup", "wait"]
+    spin:
+      plugin: "nav2_behaviors/Spin"
+    backup:
+      plugin: "nav2_behaviors/BackUp"
+    wait:
+      plugin: "nav2_behaviors/Wait"
+    global_frame: map # initally map
+    robot_base_frame: base_link
+
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: false
+    smoothing_frequency: 20.0
+    scale_velocities: false
+    feedback: "OPEN_LOOP"
+    max_velocity: [0.35, 0.0, 0.298]   # prignally 0.6 for rotational second element was 1.0 initally
+    min_velocity: [-0.35, 0.0, -0.298]
+    max_accel: [1.0, 0.0, 1.5]
+    max_decel: [-1.0, 0.0, -1.5]
+    # odom_topic: /ground_truth/odom
+    odom_topic: /odometry/local
+    odom_duration: 0.1
+
+waypoint_follower:
+  ros__parameters:
+    use_sim_time: false
+    loop_rate: 20
+    stop_on_failure: false
+    waypoint_task_executor_plugin: "wait_at_waypoint"
+    wait_at_waypoint:
+      plugin: "nav2_waypoint_follower::WaitAtWaypoint"
+      enabled: true
+      waypoint_pause_duration: 200
+
+collision_monitor:
+  ros__parameters:
+    use_sim_time: false
+
+map_server:
+  ros__parameters:
+    use_sim_time: false
+    yaml_filename: ""

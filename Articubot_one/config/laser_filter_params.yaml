@@ -1,0 +1,16 @@
+scan_to_scan_filter_chain:
+  ros__parameters:
+    filter1:
+      name: range
+      type: laser_filters/LaserScanRangeFilter
+      params:
+        lower_threshold: 0.15
+        upper_threshold: 10.0
+        lower_replacement_value: .nan
+        upper_replacement_value: .nan
+
+    filter2:
+      name: median
+      type: laser_filters/LaserScanMedianSpatialFilter
+      params:
+        window_size: 3

@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gyrontronix Robotics - GCS</title>
+
+  <!-- Leaflet Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- ROS 2D & CreateJS Dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/easeljs@1.0.2/lib/easeljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ros2d@0.9.0/build/ros2d.min.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #121316;
+      --panel-bg: #1e2026;
+      --panel-header: #282a32;
+      --border-color: #2e303a;
+      --text-main: #f1f2f6;
+      --text-muted: #9498a6;
+      --accent-purple: #8a60ff;
+      --red-estop: #dc2626;
+      --red-estop-hover: #b91c1c;
+      --amber-warn: #d97706;
+      --green-start: #16a34a;
+      --controller-btn: #3b82f6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 12px;
+    }
+
+    header {
+      height: 52px;
+      background: var(--panel-header);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      flex-shrink: 0;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 16px; color: #fff; }
+    .brand img { height: 38px; width: auto; object-fit: contain; }
+
+    .header-left { display: flex; align-items: center; gap: 24px; }
+
+    .clock-box {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.25;
+      border-left: 1px solid var(--border-color);
+      padding-left: 20px;
+    }
+    .clock-time { font-family: monospace; font-size: 15px; font-weight: 700; color: var(--accent-purple); letter-spacing: 0.5px; }
+    .clock-date { font-size: 10px; color: var(--text-muted); letter-spacing: 0.5px; }
+
+    .status-group { display: flex; align-items: center; gap: 16px; }
+
+    .ws-status, .bt-status { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #4b5563; }
+    .dot.connected { background: var(--green-start); box-shadow: 0 0 8px rgba(22,163,74,0.7); }
+    .dot.disconnected { background: var(--red-estop); box-shadow: 0 0 8px rgba(220,38,38,0.7); }
+
+    .workspace {
+      flex: 1;
+      display: flex;
+      background: var(--bg-dark);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .visuals-container {
+      position: relative;
+      background: #090a0c;
+      flex: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px;
+      overflow: hidden;
+    }
+
+    .video-stream-box {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: #000;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .video-stream-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .ros-map-box {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: #1a1a1a;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    #ros2d-map {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #ros2d-map canvas {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    #ros-map-status-overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(18, 19, 22, 0.85);
+      border: 1px solid var(--border-color);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: bold;
+      color: #fff;
+    }
+
+    .mini-map-panel {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      width: 240px;
+      height: 160px;
+      z-index: 100;
+      border: 2px solid var(--accent-purple);
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.8);
+      overflow: hidden;
+      background: #000;
+    }
+
+    #map { width: 100%; height: 100%; }
+
+    .coords-box {
+      position: absolute;
+      z-index: 1000;
+      background: rgba(18, 19, 22, 0.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-family: monospace;
+      font-size: 10px;
+      color: #fff;
+    }
+
+    .map-coords-box { bottom: 6px; left: 6px; }
+    .coord-label { color: var(--accent-purple); font-weight: bold; margin-right: 2px; }
+
+    .compass-box {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 1000;
+      background: rgba(18, 19, 22, 0.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--accent-purple);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .compass-dial {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      transition: transform 0.15s ease-out;
+    }
+
+    .compass-needle {
+      position: absolute;
+      top: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-bottom: 12px solid #ef4444;
+    }
+
+    .compass-val {
+      font-size: 9px;
+      font-weight: bold;
+      font-family: monospace;
+      z-index: 2;
+      background: rgba(0,0,0,0.6);
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+
+    .controls-column {
+      height: 100%;
+      background: var(--panel-bg);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px;
+      overflow-y: auto;
+      border-left: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+
+    .manual-column { width: 250px; }
+    .system-column { width: 330px; }
+
+    .card {
+      background: #181a20;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-header {
+      background: var(--panel-header);
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+    .btn-estop {
+      width: 100%;
+      background: var(--red-estop);
+      color: #fff;
+      border: 2px solid #f87171;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      cursor: pointer;
+      box-shadow: 0 0 15px rgba(220, 38, 38, 0.4);
+      transition: all 0.15s ease;
+    }
+    .btn-estop:hover { background: var(--red-estop-hover); }
+
+    .control-btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .btn-secondary-action {
+      background: var(--amber-warn);
+      color: #fff;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .btn-stop-all {
+      background: #4b5563;
+      color: #fff;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .dropdown-select {
+      width: 100%;
+      padding: 6px 8px;
+      background: #22252e;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      outline: none;
+    }
+
+    .btn-nav-start {
+      background: var(--green-start);
+      color: #fff;
+      border: none;
+      padding: 8px;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .script-list { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+
+    .script-item {
+      background: #22252e;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .script-row-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .script-row-extra {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .script-info { display: flex; flex-direction: column; gap: 2px; }
+    .script-title { font-weight: bold; color: #fff; font-size: 11px; }
+    .script-cmd { font-family: monospace; font-size: 9px; color: var(--text-muted); word-break: break-all; }
+
+    .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; width: max-content; }
+    .badge-stopped { background: #374151; color: #9ca3af; }
+    .badge-running { background: #16a34a; color: #fff; }
+    .badge-failed { background: var(--red-estop); color: #fff; box-shadow: 0 0 6px rgba(220,38,38,0.6); }
+
+    .script-actions { display: flex; gap: 4px; }
+
+    .btn-action {
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: none;
+      font-weight: bold;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .btn-start { background: var(--green-start); color: #fff; }
+    .btn-stop { background: var(--red-estop); color: #fff; }
+    .btn-save-map { background: var(--accent-purple); color: #fff; }
+
+    .map-input {
+      flex: 1;
+      padding: 4px 8px;
+      background: #121316;
+      border: 1px solid var(--border-color);
+      color: #fff;
+      border-radius: 4px;
+      font-size: 10px;
+      outline: none;
+    }
+
+    .teleop-card-body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 10px;
+    }
+
+    .dpad-container {
+      width: 120px;
+      height: 120px;
+      background: #232630;
+      border: 3px solid #3b82f6;
+      border-radius: 50%;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 8px 0;
+    }
+
+    .dpad-btn {
+      position: absolute;
+      background: var(--controller-btn);
+      border: none;
+      color: #fff;
+      font-weight: bold;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .dpad-up { top: 6px; width: 34px; height: 30px; border-radius: 6px 6px 2px 2px; }
+    .dpad-down { bottom: 6px; width: 34px; height: 30px; border-radius: 2px 2px 6px 6px; }
+    .dpad-left { left: 6px; width: 30px; height: 34px; border-radius: 6px 2px 2px 6px; }
+    .dpad-right { right: 6px; width: 30px; height: 34px; border-radius: 2px 6px 6px 2px; }
+
+    .dpad-center {
+      width: 24px;
+      height: 24px;
+      background: #ef4444;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sliders-row { display: flex; justify-content: space-around; width: 100%; gap: 12px; }
+    .vslider-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .vslider-title { font-size: 9px; font-weight: bold; color: var(--text-muted); text-transform: uppercase; }
+    .vslider-val { font-size: 10px; font-weight: bold; font-family: monospace; color: var(--accent-purple); }
+    .vslider-wrapper { height: 110px; display: flex; align-items: center; }
+
+    .vslider {
+      writing-mode: bt-lr;
+      writing-mode: vertical-lr;
+      direction: rtl;
+      width: 8px;
+      height: 100px;
+      accent-color: var(--accent-purple);
+      cursor: pointer;
+    }
+
+    .mission-status-tag { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #374151; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-left">
+      <div class="brand">
+        <img src="/logo.png" onError="this.style.display='none'" alt="Logo" />
+        <span>Gyrontronix Robotics</span>
+      </div>
+      <div class="clock-box">
+        <span class="clock-time" id="clock-time">--:--:--</span>
+        <span class="clock-date" id="clock-date">-- --- ----</span>
+      </div>
+    </div>
+
+    <div class="status-group">
+      <div class="bt-status">
+        <span class="dot" id="bt-dot"></span>
+        <span id="bt-label">BT: OFF</span>
+      </div>
+      <div class="ws-status">
+        <span class="dot" id="ws-dot"></span>
+        <span id="ws-label">CONNECTING</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="workspace">
+
+    <div class="visuals-container">
+      <!-- Left Box: Depth Camera Stream -->
+      <div class="video-stream-box">
+        <img src="/video_feed" alt="Live Stream Offline (/yolo/annotated_image/compressed)" />
+
+        <div class="mini-map-panel">
+          <div id="map"></div>
+
+          <div class="coords-box map-coords-box">
+            <span class="coord-label">ROVER:</span>
+            <span id="lat-val">0.000000</span>,
+            <span id="lng-val">0.000000</span>
+          </div>
+
+          <div class="compass-box">
+            <div class="compass-dial" id="compass-dial">
+              <div class="compass-needle"></div>
+            </div>
+            <div class="compass-val" id="compass-val">0°</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Box: 2D ROS Map Viewer (RViz Style) -->
+      <div class="ros-map-box" id="ros-map-container">
+        <div id="ros-map-status-overlay">
+          ROS 2: <span id="ros-status" style="color: yellow;">Connecting...</span>
+        </div>
+        <div id="ros2d-map"></div>
+      </div>
+    </div>
+
+    <!-- Column 1: Manual Drive Control -->
+    <div class="controls-column manual-column">
+      <div class="card">
+        <div class="card-header">Manual Drive Control</div>
+        <div class="teleop-card-body">
+
+          <div class="dpad-container">
+            <button class="dpad-btn dpad-up" onclick="sendMove('up')">▲</button>
+            <button class="dpad-btn dpad-down" onclick="sendMove('down')">▼</button>
+            <button class="dpad-btn dpad-left" onclick="sendMove('left')">◄</button>
+            <button class="dpad-btn dpad-right" onclick="sendMove('right')">►</button>
+            <button class="dpad-center" onclick="sendMove('stop')">■</button>
+          </div>
+
+          <div class="sliders-row">
+            <div class="vslider-col">
+              <span class="vslider-title">Linear</span>
+              <div class="vslider-wrapper">
+                <input type="range" min="0" max="1" step="0.05" value="0.2" class="vslider" id="linear-slider" oninput="onSpeedChange()" />
+              </div>
+              <span class="vslider-val" id="linear-val">0.20 m/s</span>
+            </div>
+
+            <div class="vslider-col">
+              <span class="vslider-title">Angular</span>
+              <div class="vslider-wrapper">
+                <input type="range" min="0" max="1" step="0.05" value="0.2" class="vslider" id="angular-slider" oninput="onSpeedChange()" />
+              </div>
+              <span class="vslider-val" id="angular-val">0.20 rad/s</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="script-item">
+        <div class="script-row-main">
+          <div class="script-info">
+            <span class="script-title">1. Launch 2-Wheel Sim</span>
+            <span class="script-cmd">2wheel_launch_sim.launch.py</span>
+            <span class="badge badge-stopped" id="status-badge-1">STOPPED</span>
+          </div>
+          <div class="script-actions">
+            <button class="btn-action btn-start" onclick="controlScript(1, 'start')">START</button>
+            <button class="btn-action btn-stop" onclick="controlScript(1, 'stop')">STOP</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="script-item">
+        <div class="script-row-main">
+          <div class="script-info">
+            <span class="script-title">2. Launch Nav2 Stack</span>
+            <span class="script-cmd">nav2.launch.py</span>
+            <span class="badge badge-stopped" id="status-badge-2">STOPPED</span>
+          </div>
+          <div class="script-actions">
+            <button class="btn-action btn-start" onclick="controlScript(2, 'start')">START</button>
+            <button class="btn-action btn-stop" onclick="controlScript(2, 'stop')">STOP</button>
+          </div>
+        </div>
+        <!-- Select Map Dropdown -->
+        <div class="script-row-extra">
+          <label style="font-size: 9px; color: var(--text-muted); font-weight: bold; white-space: nowrap;">MAP FILE:</label>
+          <select id="map-select" class="dropdown-select" onchange="selectMap(this.value)">
+            <option value="">Loading maps...</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="script-item">
+        <div class="script-row-main">
+          <div class="script-info">
+            <span class="script-title">3. Start Depth Cam</span>
+            <span class="script-cmd">rs_launch.py + yolo_depth_node_3.py</span>
+            <span class="badge badge-stopped" id="status-badge-3">STOPPED</span>
+          </div>
+          <div class="script-actions">
+            <button class="btn-action btn-start" onclick="controlScript(3, 'start')">START</button>
+            <button class="btn-action btn-stop" onclick="controlScript(3, 'stop')">STOP</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Column 2: System & Script Execution -->
+    <div class="controls-column system-column">
+
+      <div class="card">
+        <div class="card-header">Emergency & Safety</div>
+        <div class="card-body">
+          <button class="btn-estop" onclick="triggerEStop()">🛑 EMERGENCY STOP</button>
+          <div class="control-btn-group">
+            <button class="btn-secondary-action" onclick="stopMission()">⚠️ STOP MISSION</button>
+            <button class="btn-stop-all" onclick="stopAllScripts()">⏹️ STOP ALL SCRIPTS</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span>Target Navigation</span>
+          <span class="mission-status-tag" id="mission-status-tag">IDLE</span>
+        </div>
+        <div class="card-body">
+          <label style="font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase;">Select Target Point</label>
+          <select id="point-select" class="dropdown-select">
+            <option value="Point A">Point A</option>
+            <option value="Point B">Point B</option>
+            <option value="Point C">Point C</option>
+          </select>
+          <button class="btn-nav-start" onclick="startPointNavigation()">🚀 START NAVIGATION</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">ROS 2 Script Execution</div>
+        <div class="script-list">
+
+          <div class="script-item">
+            <div class="script-row-main">
+              <div class="script-info">
+                <span class="script-title">4. Start Manual Controller</span>
+                <span class="script-cmd">python evofox_teleop.py</span>
+                <span class="badge badge-stopped" id="status-badge-4">STOPPED</span>
+              </div>
+              <div class="script-actions">
+                <button class="btn-action btn-start" onclick="controlScript(4, 'start')">START</button>
+                <button class="btn-action btn-stop" onclick="controlScript(4, 'stop')">STOP</button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="script-item">
+            <div class="script-row-main">
+              <div class="script-info">
+                <span class="script-title">5. ROS Bridge Websocket</span>
+                <span class="script-cmd">rosbridge_websocket_launch.xml</span>
+                <span class="badge badge-stopped" id="status-badge-5">STOPPED</span>
+              </div>
+              <div class="script-actions">
+                <button class="btn-action btn-start" onclick="controlScript(5, 'start')">START</button>
+                <button class="btn-action btn-stop" onclick="controlScript(5, 'stop')">STOP</button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="script-item">
+            <div class="script-row-main">
+              <div class="script-info">
+                <span class="script-title">6. Mapping</span>
+                <span class="script-cmd">mapper_params_online_async.yaml</span>
+                <span class="badge badge-stopped" id="status-badge-6">STOPPED</span>
+              </div>
+              <div class="script-actions">
+                <button class="btn-action btn-start" onclick="controlScript(6, 'start')">START</button>
+                <button class="btn-action btn-stop" onclick="controlScript(6, 'stop')">STOP</button>
+              </div>
+            </div>
+            <!-- Map Saver Input and Button -->
+            <div class="script-row-extra">
+              <input type="text" id="map-save-name" class="map-input" placeholder="Enter map name (e.g. room1)" />
+              <button class="btn-action btn-save-map" onclick="saveCurrentMap()">💾 SAVE MAP</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // --- Leaflet Mini Map Initialization ---
+    const defaultLat = 22.5280;
+    const defaultLng = 75.9230;
+
+    const map = L.map('map', { zoomControl: false }).setView([defaultLat, defaultLng], 18);
+
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Esri Satellite'
+    }).addTo(map);
+
+    const roverMarker = L.marker([defaultLat, defaultLng]).addTo(map);
+
+    setTimeout(() => { map.invalidateSize(); }, 300);
+
+    function updateCoordsDisplay(lat, lng) {
+      document.getElementById('lat-val').innerText = parseFloat(lat).toFixed(6);
+      document.getElementById('lng-val').innerText = parseFloat(lng).toFixed(6);
+    }
+
+    function updateClock() {
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      document.getElementById('clock-time').innerText = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      const dateOpts = { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' };
+      document.getElementById('clock-date').innerText = now.toLocaleDateString(undefined, dateOpts);
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // --- Ground Control Station WebSocket ---
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    let socket;
+    const wsDot = document.getElementById('ws-dot');
+    const wsLabel = document.getElementById('ws-label');
+    const btDot = document.getElementById('bt-dot');
+    const btLabel = document.getElementById('bt-label');
+
+    function setWsStatus(state) {
+      wsDot.className = 'dot ' + state;
+      wsLabel.innerText = state === 'connected' ? 'LIVE' : (state === 'disconnected' ? 'DISCONNECTED' : 'CONNECTING');
+    }
+
+    function syncStateUI(state) {
+      if (state.script_status) {
+        Object.keys(state.script_status).forEach(id => {
+          const badge = document.getElementById(`status-badge-${id}`);
+          if (badge) {
+            const status = state.script_status[id];
+            badge.innerText = status;
+            if (status === 'RUNNING') badge.className = 'badge badge-running';
+            else if (status === 'FAILED') badge.className = 'badge badge-failed';
+            else badge.className = 'badge badge-stopped';
+          }
+        });
+      }
+
+      if (state.available_maps) {
+        const mapSelect = document.getElementById('map-select');
+        const currentSel = state.selected_map || mapSelect.value;
+        mapSelect.innerHTML = '';
+        if (state.available_maps.length === 0) {
+          mapSelect.innerHTML = '<option value="">No .yaml maps found</option>';
+        } else {
+          state.available_maps.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.innerText = m;
+            if (m === currentSel) opt.selected = true;
+            mapSelect.appendChild(opt);
+          });
+        }
+      }
+
+      if (state.linear_speed !== undefined) {
+        document.getElementById('linear-slider').value = state.linear_speed;
+        document.getElementById('linear-val').innerText = `${parseFloat(state.linear_speed).toFixed(2)} m/s`;
+      }
+      if (state.angular_speed !== undefined) {
+        document.getElementById('angular-slider').value = state.angular_speed;
+        document.getElementById('angular-val').innerText = `${parseFloat(state.angular_speed).toFixed(2)} rad/s`;
+      }
+
+      if (state.mission_status) {
+        document.getElementById('mission-status-tag').innerText = state.mission_status.toUpperCase();
+      }
+
+      if (state.bluetooth_connected !== undefined) {
+        if (state.bluetooth_connected) {
+          btDot.className = 'dot connected';
+          btLabel.innerText = 'BT: CONNECTED';
+        } else {
+          btDot.className = 'dot disconnected';
+          btLabel.innerText = 'BT: OFF';
+        }
+      }
+    }
+
+    function connectSocket() {
+      socket = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+
+      socket.onopen = () => setWsStatus('connected');
+      socket.onclose = () => { setWsStatus('disconnected'); setTimeout(connectSocket, 2000); };
+      socket.onerror = () => setWsStatus('disconnected');
+
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "state_sync") {
+          syncStateUI(data.state);
+        } else if (data.type === "gps_update") {
+          roverMarker.setLatLng([data.lat, data.lng]);
+          map.panTo([data.lat, data.lng]);
+          updateCoordsDisplay(data.lat, data.lng);
+        } else if (data.type === "heading_update") {
+          const heading = data.heading;
+          document.getElementById('compass-dial').style.transform = `rotate(${heading}deg)`;
+          document.getElementById('compass-val').innerText = `${Math.round(heading)}°`;
+        }
+      };
+    }
+    connectSocket();
+
+    function wsSend(obj) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(obj));
+      }
+    }
+
+    function onSpeedChange() {
+      const lin = parseFloat(document.getElementById('linear-slider').value);
+      const ang = parseFloat(document.getElementById('angular-slider').value);
+      document.getElementById('linear-val').innerText = `${lin.toFixed(2)} m/s`;
+      document.getElementById('angular-val').innerText = `${ang.toFixed(2)} rad/s`;
+      wsSend({ type: "speed_update", linear_speed: lin, angular_speed: ang });
+    }
+
+    function sendMove(dir) {
+      const linearSpeed = parseFloat(document.getElementById('linear-slider').value);
+      const angularSpeed = parseFloat(document.getElementById('angular-slider').value);
+      let lx = 0.0, az = 0.0;
+      if (dir === 'up') lx = linearSpeed;
+      if (dir === 'down') lx = -linearSpeed;
+      if (dir === 'left') az = angularSpeed;
+      if (dir === 'right') az = -angularSpeed;
+      wsSend({ type: "teleop_cmd", linear_x: lx, angular_z: az });
+    }
+
+    function controlScript(scriptId, action) {
+      wsSend({ type: "script_control", script_id: scriptId, action: action });
+    }
+
+    function saveCurrentMap() {
+      const input = document.getElementById('map-save-name');
+      const filename = input.value.trim();
+      if (!filename) {
+        alert("Please enter a map name before saving.");
+        return;
+      }
+      wsSend({ type: "save_map", filename: filename });
+      input.value = "";
+    }
+
+    function selectMap(mapName) {
+      if (mapName) {
+        wsSend({ type: "select_map", map_name: mapName });
+      }
+    }
+
+    function startPointNavigation() {
+      const selectedPoint = document.getElementById('point-select').value;
+      wsSend({ type: "navigate_to_point", point: selectedPoint });
+    }
+
+    function stopMission() {
+      wsSend({ type: "stop_mission" });
+    }
+
+    function stopAllScripts() {
+      wsSend({ type: "stop_all_scripts" });
+    }
+
+    function triggerEStop() {
+      wsSend({ type: "estop" });
+    }
+
+    // --- Embedded 2D ROS Map Viewer Code ---
+    const hostIp = window.location.hostname || "127.0.0.1";
+    const ros = new ROSLIB.Ros({
+        url: `ws://${hostIp}:9090`
+    });
+
+    const statusEl = document.getElementById('ros-status');
+
+    ros.on('connection', () => {
+        if (statusEl) {
+          statusEl.innerText = "Connected";
+          statusEl.style.color = "#00ff00";
+        }
+    });
+
+    ros.on('error', () => {
+        if (statusEl) {
+          statusEl.innerText = "Error";
+          statusEl.style.color = "#ff0000";
+        }
+    });
+
+    ros.on('close', () => {
+        if (statusEl) {
+          statusEl.innerText = "Disconnected";
+          statusEl.style.color = "#ffaa00";
+        }
+    });
+
+    const rosMapBox = document.getElementById('ros-map-container');
+    let canvasWidth = rosMapBox ? rosMapBox.clientWidth || 500 : 500;
+    let canvasHeight = rosMapBox ? rosMapBox.clientHeight || 500 : 500;
+
+    const viewer = new ROS2D.Viewer({
+        divID: 'ros2d-map',
+        width: canvasWidth,
+        height: canvasHeight
+    });
+
+    // Layer Hierarchy
+    const mapLayer = new createjs.Container();
+    const costmapLayer = new createjs.Container();
+    const robotLayer = new createjs.Container();
+
+    viewer.scene.addChild(mapLayer);
+    viewer.scene.addChild(costmapLayer);
+    viewer.scene.addChild(robotLayer);
+
+    // 1. Static Base Map Subscriber
+    let currentMapGrid = null;
+    const mapTopic = new ROSLIB.Topic({
+        ros: ros,
+        name: '/map',
+        messageType: 'nav_msgs/msg/OccupancyGrid',
+        qos: { durability: 'transient_local', reliability: 'reliable' }
+    });
+
+    mapTopic.subscribe((message) => {
+        if (currentMapGrid) mapLayer.removeChild(currentMapGrid);
+
+        currentMapGrid = new ROS2D.OccupancyGrid({ message: message });
+        mapLayer.addChild(currentMapGrid);
+
+        if (currentMapGrid.width > 0 && currentMapGrid.height > 0) {
+            const container = document.getElementById('ros-map-container');
+            const cWidth = container ? container.clientWidth || 500 : 500;
+            const cHeight = container ? container.clientHeight || 500 : 500;
+
+            viewer.width = cWidth;
+            viewer.height = cHeight;
+            if (viewer.scene && viewer.scene.canvas) {
+                viewer.scene.canvas.width = cWidth;
+                viewer.scene.canvas.height = cHeight;
+            }
+
+            const mapWidth = currentMapGrid.width;
+            const mapHeight = currentMapGrid.height;
+
+            const scale = Math.min(cWidth / mapWidth, cHeight / mapHeight);
+
+            viewer.scene.scaleX = scale;
+            viewer.scene.scaleY = scale;
+
+            const originX = currentMapGrid.pose.position.x;
+            const originY = currentMapGrid.pose.position.y;
+
+            const xOffset = (cWidth - mapWidth * scale) / 2;
+            const yOffset = (cHeight - mapHeight * scale) / 2;
+
+            viewer.scene.x = xOffset - (originX * scale);
+            viewer.scene.y = cHeight - yOffset + (originY * scale);
+        }
+    });
+
+    // Robot & Scan Layer Setup
+    let currentPose = { x: 0, y: 0, yaw: 0 };
+    let receivedAmclPose = false;
+
+    const scanShape = new createjs.Shape();
+    const robotMarker = new createjs.Container();
+    const robotBody = new createjs.Shape();
+
+    robotLayer.addChild(scanShape);
+    robotLayer.addChild(robotMarker);
+    robotMarker.addChild(robotBody);
+
+    const rLen = 0.70;
+    const rWid = 0.38;
+
+    robotBody.graphics
+        .beginFill("#0066ff")
+        .setStrokeStyle(0.01)
+        .beginStroke("#ffffff")
+        .drawRect(-rLen / 2, -rWid / 2, rLen, rWid);
+
+    robotBody.graphics
+        .beginFill("#ffffff")
+        .moveTo(rLen / 2, 0)
+        .lineTo(rLen / 4, -rWid / 4)
+        .lineTo(rLen / 4, rWid / 4)
+        .closePath();
+
+    // LiDAR Point Cloud Subscriber
+    const scanTopic = new ROSLIB.Topic({
+        ros: ros,
+        name: '/scan',
+        messageType: 'sensor_msgs/msg/LaserScan'
+    });
+
+    scanTopic.subscribe((scan) => {
+        scanShape.graphics.clear();
+
+        let angle = scan.angle_min;
+        for (let i = 0; i < scan.ranges.length; i++) {
+            const r = scan.ranges[i];
+            if (r >= scan.range_min && r <= scan.range_max && !isNaN(r)) {
+                const globalAngle = currentPose.yaw + angle;
+                const mapX = currentPose.x + r * Math.cos(globalAngle);
+                const mapY = -(currentPose.y + r * Math.sin(globalAngle));
+
+                scanShape.graphics
+                    .beginFill("#ff0000")
+                    .drawCircle(mapX, mapY, 0.05)
+                    .endFill();
+            }
+            angle += scan.angle_increment;
+        }
+    });
+
+    // Robot Pose Tracking
+    function updatePose(pos, q) {
+        currentPose.x = pos.x;
+        currentPose.y = pos.y;
+
+        const siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
+        const cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+        currentPose.yaw = Math.atan2(siny_cosp, cosy_cosp);
+
+        robotMarker.x = currentPose.x;
+        robotMarker.y = -currentPose.y;
+        robotMarker.rotation = -currentPose.yaw * (180.0 / Math.PI);
+    }
+
+    const poseSub = new ROSLIB.Topic({
+        ros: ros,
+        name: '/amcl_pose',
+        messageType: 'geometry_msgs/msg/PoseWithCovarianceStamped'
+    });
+
+    poseSub.subscribe((msg) => {
+        receivedAmclPose = true;
+        updatePose(msg.pose.pose.position, msg.pose.pose.orientation);
+    });
+
+    const odomSub = new ROSLIB.Topic({
+        ros: ros,
+        name: '/odom',
+        messageType: 'nav_msgs/msg/Odometry'
+    });
+
+    odomSub.subscribe((msg) => {
+        if (!receivedAmclPose) {
+            updatePose(msg.pose.pose.position, msg.pose.pose.orientation);
+        }
+    });
+  </script>
+</body>
+</html>
