@@ -54,7 +54,7 @@ def generate_launch_description():
     # for GPS localization 
 
     ekf_config = os.path.join(
-        get_package_share_directory('articubot_one'), 'config', 'ekf_gps1.yaml'
+        get_package_share_directory(package_name), 'config', 'ekf_gps.yaml'
     )
 
     navsat_transform_node = Node(
@@ -110,7 +110,7 @@ def generate_launch_description():
 
 
     imu_serial_bridge_node = Node(
-        package='articubot_one',
+        package=package_name,
         executable='IMU_node.py',
         name='imu_serial_bridge',
         output='screen',
@@ -131,7 +131,7 @@ def generate_launch_description():
     
 
     scan_filter_node = Node(
-        package='articubot_one',
+        package=package_name,
         executable='scan_filter.py',
         name='scan_filter',
         output='screen',
@@ -140,7 +140,7 @@ def generate_launch_description():
 
     # 6. Custom GPS/GNSS Driver Node
     gps_driver_node = Node(
-        package='articubot_one',
+        package=package_name,
         executable='gps_node.py', # Make sure this matches your file name exactly
         name='gps_gnss_driver_node',
         output='screen',
@@ -165,7 +165,7 @@ def generate_launch_description():
     # )
     
     arduino_node=Node(
-        package='articubot_one',
+        package=package_name,
         executable='arduino_node.py',
         name='arduino_node',
         output='screen',
@@ -184,13 +184,13 @@ def generate_launch_description():
     #     )
 
     
-    gps_nav2_bridge_node = Node(
-        package='articubot_one',
-        executable='gps_nav2_bridge.py',  # Ensure script is executable & in CMakeLists.txt / setup.py
-        name='gps_nav2_bridge',
-        output='screen',
-        parameters=[{'use_sim_time': False}]
-    )
+    # gps_nav2_bridge_node = Node(
+    #     package='articubot_one',
+    #     executable='gps_nav2_bridge.py',  # Ensure script is executable & in CMakeLists.txt / setup.py
+    #     name='gps_nav2_bridge',
+    #     output='screen',
+    #     parameters=[{'use_sim_time': False}]
+    # )
 
     # Launch them all!
     return LaunchDescription([
@@ -200,7 +200,7 @@ def generate_launch_description():
         navsat_transform_node,
         local_ekf_node,
         global_ekf_node,
-        gps_nav2_bridge_node,
+        # gps_nav2_bridge_node,
         # joint_state_publisher_gui,
         # Odom_publisher,
         rplidar_launch,

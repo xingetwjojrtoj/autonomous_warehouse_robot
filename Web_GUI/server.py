@@ -20,6 +20,10 @@ from std_msgs.msg import Float32
 from sensor_msgs.msg import NavSatFix, Imu, CompressedImage
 from nav_msgs.msg import Odometry
 
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PKG_NAME = "articubot_one"
+
 # Nav2 Action Imports
 try:
     from nav2_msgs.action import NavigateToPose, FollowWaypoints
@@ -353,20 +357,24 @@ async def on_startup():
 
 @app.get("/map_view", response_class=HTMLResponse)
 async def get_map_view():
-    with open("map_viewer.html", "r", encoding="utf-8") as f:
+    map_path = os.path.join(BASE_DIR, "map_viewer.html")
+    with open(map_path, "r", encoding="utf-8") as f:
         return f.read()
 
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
-    with open("templates/index.html", "r", encoding="utf-8") as f:
+    index_path = os.path.join(BASE_DIR, "templates", "index.html")
+    with open(index_path, "r", encoding="utf-8") as f:
         return f.read()
 
 
 @app.get("/logo.png")
 async def get_logo():
-    if os.path.exists("logo.png"):
-        return FileResponse("logo.png")
+    logo_path = os.path.join(BASE_DIR, "logo.png")
+    if os.path.exists(logo_path):
+        
+        return FileResponse(logo_path)
     return HTMLResponse(status_code=404, content="Logo not found")
 
 
@@ -458,25 +466,42 @@ async def websocket_endpoint(websocket: WebSocket):
 def start_script(script_id):
     global script_processes
     stop_script(script_id)
+    try:
+        pkg_share = get_package_share_directory(PKG_NAME)
+    except Exception as e:
+        print(f"Error finding ROS package {PKG_NAME}: {e}")
+        pkg_share = ""
 
-    home_dir = os.path.expanduser("~")
-    robot_dir = os.path.join(home_dir, "2_wheel_robot")
+    # Source ROS environment dynamically
+    ros_env = "source /opt/ros/humble/setup.bash 2>/dev/null || source /opt/ros/foxy/setup.bash 2>/dev/null; [ -f install/setup.bash ] && source install/setup.bash;"
+
+    # home_dir = os.path.expanduser("~")
+    # robot_dir = os.path.join(home_dir, "2_wheel_robot")
+    # script_dir = os.path.join(home_dir, "2_wheel_robot", "src", "articubot_one", "scripts")
 
     if script_id == 1:
-        cmd = f"cd {robot_dir} && source /opt/ros/humble/setup.bash 2>/dev/null || source /opt/ros/foxy/setup.bash 2>/dev/null; source install/setup.bash && ros2 launch articubot_one 2wheel_launch_sim.launch.py"
+        cmd = f"cd {ros_env} ros2 launch {PKG_NAME} 2wheel_launch_sim.launch.py"
     elif script_id == 2:
         selected_map = system_state.get("selected_map", "")
-        map_path = os.path.join(home_dir, selected_map) if selected_map else os.path.join(home_dir, "terrace_3_m.yaml")
-        cmd = f"cd {robot_dir} && source /opt/ros/humble/setup.bash 2>/dev/null || source /opt/ros/foxy/setup.bash 2>/dev/null; source install/setup.bash && ros2 launch articubot_one nav2.launch.py map:={map_path}"
+        if selected_map:
+            map_path = os.path.join(os.path.expanduser("~"), selected_map)
+        else:
+            map_path = os.path.join(pkg_share, "maps", "my_map.yaml") if pkg_share else "my_map.yaml"
+        
+        cmd = f"{ros_env} ros2 launch {PKG_NAME} nav2.launch.py map:={map_path}"
     elif script_id == 3:
-        cmd = f"cd {home_dir} && source /opt/ros/humble/setup.bash 2>/dev/null || source /opt/ros/foxy/setup.bash 2>/dev/null; (ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true depth_module.profile:=428x240x15 rgb_camera.profile:=428x240x15 &) && sleep 3 && python3 yolo_depth_node_3.py"
+        cmd = f"{ros_env} (ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true depth_module.profile:=428x240x15 rgb_camera.profile:=428x240x15 &) && sleep 3 && ros2 run {PKG_NAME} yolo_depth_node.py"
+
     elif script_id == 4:
-        cmd = f"cd {home_dir} && python3 evofox_teleop.py"
+        cmd = f"{ros_env} ros2 run {PKG_NAME} evofox_teleop.py"
+
     elif script_id == 5:
-        cmd = f"cd {home_dir} && source /opt/ros/humble/setup.bash 2>/dev/null || source /opt/ros/foxy/setup.bash 2>/dev/null; ros2 launch rosbridge_server rosbridge_websocket_launch.xml"
+        cmd = f"{ros_env} ros2 launch rosbridge_server rosbridge_websocket_launch.xml"
+
     elif script_id == 6:
-        map_param = "./src/articubot_one/config/mapper_params_online_async.yaml"
-        cmd = f"cd {robot_dir} && source /opt/ros/humble/setup.bash 2>/dev/null || source /opt/ros/foxy/setup.bash 2>/dev/null; source install/setup.bash && ros2 launch slam_toolbox online_async_launch.py params_file:={map_param}"
+        map_param = os.path.join(pkg_share, "config", "mapper_params_online_async.yaml") if pkg_share else "./config/mapper_params_online_async.yaml"
+        cmd = f"{ros_env} ros2 launch slam_toolbox online_async_launch.py params_file:={map_param}"
+
     else:
         return
 
